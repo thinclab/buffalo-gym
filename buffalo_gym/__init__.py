@@ -26,7 +26,7 @@ register(
 
 register(
     id='BoundlessBuffalo-v0',
-    entry_point='buffalo_gym.envs:BoundlessBuffaloEnv',
+    entry_point='buffalo_gym.buffalo_gym.envs:BoundlessBuffaloEnv',
     max_episode_steps=1000
 )
 

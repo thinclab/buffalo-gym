@@ -1,14 +1,15 @@
 from typing import Any, TypeVar, SupportsFloat
 
-import gymnasium as gym
 import numpy as np
+import gymnasium as gym
+import matplotlib.pyplot as plt
+from .reward_functions import Gaussian, Polynomial
 
 ObsType = TypeVar("ObsType")
 ActType = TypeVar("ActType")
 
 
 class BoundlessBuffaloEnv(gym.Env):
-
     def __draw_polynomial(self):
         """
         Draw a new set of coefficients for the reward polynomial
@@ -26,6 +27,7 @@ class BoundlessBuffaloEnv(gym.Env):
         roots = [root.real for root in d1.roots() if np.isrealobj(root) and d2(root.real) < 0]
         maximum = max([self.polynomial(root) for root in roots], default=0)
         self.polynomial.coef[0] += self.max_val - maximum
+        self.reward_model = Polynomial(coefficients=self.polynomial.coef)
 
         self.left_shoulder = -np.inf
         self.right_shoulder = np.inf
@@ -39,9 +41,34 @@ class BoundlessBuffaloEnv(gym.Env):
             self.left_shoulder = min(shoulders, default=-np.inf)
             self.right_shoulder = max(shoulders, default=np.inf)
 
-    def __init__(self, degree: int = 2, dynamic_rate: int | None = None, seed: int | None = None,
-                 std_deviation: float = 0.1, coef_range: float = 10, max_val: float = 10.0, shoulders: bool = True,
-                 shoulder_leakage: float = 0.0):
+    def __draw_predefined_polynomial(self, polynomial):
+        """
+        Loads a predefined polynomial based on the input integer
+        :param polynomial: integer which determines which predefined polynomial to load
+        """
+        if polynomial == 1:
+            self.polynomial = lambda x: np.exp(-40 * (x - 0.35) ** 2) + np.exp(-40 * (x - 0.65) ** 2)
+            self.reward_model = Gaussian(mus=[0.35, 0.65], alpha=40.0)
+            self.left_shoulder = 0.0
+            self.right_shoulder = 1.0
+            self.maximum = 1.027323722
+            self.minimum = 0.0074466288
+        else:
+            raise ValueError("'predefined_polynomial' must be 1 or None")
+
+    def __init__(
+        self,
+        degree: int = 2,
+        dynamic_rate: int | None = None,
+        seed: int | None = None,
+        std_deviation: float = 0.1,
+        coef_range: float = 10,
+        max_val: float = 10.0,
+        shoulders: bool = True,
+        shoulder_leakage: float = 0.0,
+        predefined_polynomial: int | None = None,
+        add_reward_noise: bool = False,
+    ):
         """
         Infinite armed bandit environment.  The input is scaled from (-inf, +inf) to (-1, +1) in an attempt to keep
         this numerically stable.  Also, coefficients are drawn from (-0.1, 0.1) to help this along.
@@ -49,6 +76,8 @@ class BoundlessBuffaloEnv(gym.Env):
         :param dynamic_rate: number of pulls between drawing a new polynomial, NONE if not dynamic
         :param seed: Randomness seed, NONE if it doesn't matter
         :param std_deviation: randomness around reward function
+        :param predefined_polynomial: Integer value to load predefined function for reward
+        :param add_reward_noise: Determines if reward is deterministic or stochastic
         """
         if degree < 2 or degree % 2 == 1:
             raise ValueError("degree must be an even number greater than or equal to 2")
@@ -62,18 +91,19 @@ class BoundlessBuffaloEnv(gym.Env):
         self.max_val = max_val
         self.shoulders = shoulders
         self.shoulder_leakage = shoulder_leakage
+        self.add_reward_noise = add_reward_noise
 
         self.action_space = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(1,))
         self.observation_space = gym.spaces.Box(low=0, high=1, shape=(1,), dtype=np.float32)
 
-        self.__draw_polynomial()
+        if not predefined_polynomial:
+            self.__draw_polynomial()
+        elif predefined_polynomial:
+            self.__draw_predefined_polynomial(predefined_polynomial)
         self.pulls = 0
 
-    def reset(self,
-              *,
-              seed: int | None = None,
-              options: dict[str, Any] | None = None) -> tuple[ObsType, dict[str, Any]]:
-        """"
+    def reset(self, *, seed: int | None = None, options: dict[str, Any] | None = None) -> tuple[ObsType, dict[str, Any]]:
+        """ "
         Resets the environment
         :param seed: WARN unused, defaults to None
         :param options: WARN unused, defaults to None
@@ -99,7 +129,8 @@ class BoundlessBuffaloEnv(gym.Env):
             reward = right + self.shoulder_leakage * (self.polynomial(action)[0] - right)
         else:
             reward = self.polynomial(action)[0]
-        reward += np.random.normal(0, self.std_deviation)
+        if self.add_reward_noise:
+            reward += np.random.normal(0, self.std_deviation)
 
         self.pulls += 1  # Fixed double increment bug
         if self.dynamic_rate is not None and self.pulls % self.dynamic_rate == 0:
@@ -108,3 +139,17 @@ class BoundlessBuffaloEnv(gym.Env):
             self.__draw_polynomial()
 
         return np.zeros((1,), dtype=np.float32), reward, False, False, {"coef": self.polynomial.coef}
+
+    def plot_polynomial(self):
+        """
+        Plots the current polynomial
+        """
+        x = np.linspace(self.left_shoulder, self.right_shoulder, 1000)
+        y = self.polynomial(x)
+        plt.plot(x, y)
+        plt.xlabel("Action")
+        plt.ylabel("Reward")
+        plt.title("Reward Polynomial")
+        plt.legend()
+        plt.grid()
+        plt.show()

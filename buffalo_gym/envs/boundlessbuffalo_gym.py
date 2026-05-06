@@ -49,7 +49,7 @@ class BoundlessBuffaloEnv(gym.Env):
         """
         self.coefficient = 1
         if polynomial == 1:
-            self.polynomial = lambda x: (np.exp(-40 * (x - 0.35) ** 2) + np.exp(-40 * (x - 0.65) ** 2))/1.31
+            self.polynomial = lambda x: (np.exp(-40 * (x - 0.35) ** 2) + np.exp(-40 * (x - 0.65) ** 2)) / 1.31
             self.reward_model = Gaussian(mus=[0.35, 0.65], alphas=[40.0, 40.0], coefs=[1.0, 1.0], norm=1.31)
             self.left_shoulder = 0.0
             self.right_shoulder = 1.0
@@ -73,8 +73,15 @@ class BoundlessBuffaloEnv(gym.Env):
             self.left_shoulder = 0.0
             self.right_shoulder = 3.0
         elif polynomial == 5:
-            self.polynomial = lambda x: (0.41 * np.exp(-80 * (x - 0.2) ** 2) + 0.37 * np.exp(-60 * (x - 0.4) ** 2) + 0.4 * np.exp(-80 * (x - 0.6) ** 2) + 0.3 * np.exp(-50 * (x - 0.8) ** 2))
-            self.reward_model = Gaussian(mus=[0.2, 0.4, 0.6, 0.8], alphas=[80.0, 60.0, 80.0, 50.0], coefs=[0.41, 0.37, 0.4, 0.3], norm=1)
+            self.polynomial = lambda x: (
+                0.41 * np.exp(-80 * (x - 0.2) ** 2)
+                + 0.37 * np.exp(-60 * (x - 0.4) ** 2)
+                + 0.4 * np.exp(-80 * (x - 0.6) ** 2)
+                + 0.3 * np.exp(-50 * (x - 0.8) ** 2)
+            )
+            self.reward_model = Gaussian(
+                mus=[0.2, 0.4, 0.6, 0.8], alphas=[80.0, 60.0, 80.0, 50.0], coefs=[0.41, 0.37, 0.4, 0.3], norm=1
+            )
             self.left_shoulder = 0.0
             self.right_shoulder = 1.0
         else:

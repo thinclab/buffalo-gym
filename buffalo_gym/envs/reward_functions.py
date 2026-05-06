@@ -9,7 +9,7 @@ class Polynomial(torch.nn.Module):
 
     def forward(self, x):
         x = torch.as_tensor(x, dtype=torch.float32)
-        return torch.sum(self.coefficients * (x ** self.powers), dim=1, keepdim=True)
+        return torch.sum(self.coefficients * (x**self.powers), dim=1, keepdim=True)
 
 
 class Gaussian(torch.nn.Module):

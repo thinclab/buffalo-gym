@@ -40,21 +40,45 @@ class BoundlessBuffaloEnv(gym.Env):
             shoulders = [root.real for root in cross.roots()]
             self.left_shoulder = min(shoulders, default=-np.inf)
             self.right_shoulder = max(shoulders, default=np.inf)
+        self.coefficient = self.polynomial.coef
 
-    def __draw_predefined_polynomial(self, polynomial):
+    def __draw_predefined_polynomial(self, polynomial: int):
         """
         Loads a predefined polynomial based on the input integer
         :param polynomial: integer which determines which predefined polynomial to load
         """
+        self.coefficient = 1
         if polynomial == 1:
-            self.polynomial = lambda x: np.exp(-40 * (x - 0.35) ** 2) + np.exp(-40 * (x - 0.65) ** 2)
-            self.reward_model = Gaussian(mus=[0.35, 0.65], alpha=40.0)
+            self.polynomial = lambda x: (np.exp(-40 * (x - 0.35) ** 2) + np.exp(-40 * (x - 0.65) ** 2))/1.31
+            self.reward_model = Gaussian(mus=[0.35, 0.65], alphas=[40.0, 40.0], coefs=[1.0, 1.0], norm=1.31)
             self.left_shoulder = 0.0
             self.right_shoulder = 1.0
-            self.maximum = 1.027323722
-            self.minimum = 0.0074466288
+        elif polynomial == 2 or polynomial == 3:
+            if polynomial == 2:
+                coefficients = [1.1, -2.9, 3, 7.3, -1.4, -1.5, 2.3, -2.8, -2.7]
+                poly_coefficients = coefficients
+                powers = [0, 1, 2, 3, 4, 5, 6, 7, 8]
+            elif polynomial == 3:
+                coefficients = [0.1, 0.4, -0.08]
+                poly_coefficients = [0.1, 0, 0, 0, 0, 0, 0.4, 0, 0, 0, -0.08]
+                powers = [0, 6, 10]
+            self.polynomial = np.polynomial.Polynomial(poly_coefficients)
+            self.reward_model = Polynomial(coefficients, powers)
+            roots = [root.real for root in self.polynomial.roots()]
+            self.left_shoulder = min(roots)
+            self.right_shoulder = max(roots)
+        elif polynomial == 4:
+            self.polynomial = lambda x: (0.5 * np.exp(-100 * (x - 0.6) ** 2) + 0.5 * np.exp(-2 * (x - 1.4) ** 2))
+            self.reward_model = Gaussian(mus=[0.6, 1.4], alphas=[100.0, 2.0], coefs=[0.5, 0.5], norm=1)
+            self.left_shoulder = 0.0
+            self.right_shoulder = 3.0
+        elif polynomial == 5:
+            self.polynomial = lambda x: (0.41 * np.exp(-80 * (x - 0.2) ** 2) + 0.37 * np.exp(-60 * (x - 0.4) ** 2) + 0.4 * np.exp(-80 * (x - 0.6) ** 2) + 0.3 * np.exp(-50 * (x - 0.8) ** 2))
+            self.reward_model = Gaussian(mus=[0.2, 0.4, 0.6, 0.8], alphas=[80.0, 60.0, 80.0, 50.0], coefs=[0.41, 0.37, 0.4, 0.3], norm=1)
+            self.left_shoulder = 0.0
+            self.right_shoulder = 1.0
         else:
-            raise ValueError("'predefined_polynomial' must be 1 or None")
+            raise ValueError("'predefined_polynomial' must be 1, 2, 3, 4, 5, or None")
 
     def __init__(
         self,
@@ -67,7 +91,7 @@ class BoundlessBuffaloEnv(gym.Env):
         shoulders: bool = True,
         shoulder_leakage: float = 0.0,
         predefined_polynomial: int | None = None,
-        add_reward_noise: bool = False,
+        binary_reward: bool = False,
     ):
         """
         Infinite armed bandit environment.  The input is scaled from (-inf, +inf) to (-1, +1) in an attempt to keep
@@ -77,7 +101,7 @@ class BoundlessBuffaloEnv(gym.Env):
         :param seed: Randomness seed, NONE if it doesn't matter
         :param std_deviation: randomness around reward function
         :param predefined_polynomial: Integer value to load predefined function for reward
-        :param add_reward_noise: Determines if reward is deterministic or stochastic
+        :param binary_reward: Determines if reward is deterministic or sampled from reward probability function
         """
         if degree < 2 or degree % 2 == 1:
             raise ValueError("degree must be an even number greater than or equal to 2")
@@ -91,7 +115,7 @@ class BoundlessBuffaloEnv(gym.Env):
         self.max_val = max_val
         self.shoulders = shoulders
         self.shoulder_leakage = shoulder_leakage
-        self.add_reward_noise = add_reward_noise
+        self.binary_reward = binary_reward
 
         self.action_space = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(1,))
         self.observation_space = gym.spaces.Box(low=0, high=1, shape=(1,), dtype=np.float32)
@@ -110,10 +134,9 @@ class BoundlessBuffaloEnv(gym.Env):
         :return: observation, info
         """
         self.seed = seed
-        self.__draw_polynomial()
         self.pulls = 0
 
-        return np.zeros((1,), dtype=np.float32), {"coef": self.polynomial.coef}
+        return np.zeros((1,), dtype=np.float32), {"coef": self.coefficient}
 
     def step(self, action: float) -> tuple[ObsType, SupportsFloat, bool, bool, dict[str, Any]]:
         """
@@ -129,8 +152,8 @@ class BoundlessBuffaloEnv(gym.Env):
             reward = right + self.shoulder_leakage * (self.polynomial(action)[0] - right)
         else:
             reward = self.polynomial(action)[0]
-        if self.add_reward_noise:
-            reward += np.random.normal(0, self.std_deviation)
+        if self.binary_reward:
+            reward = 1 if np.random.rand() <= reward else 0
 
         self.pulls += 1  # Fixed double increment bug
         if self.dynamic_rate is not None and self.pulls % self.dynamic_rate == 0:
@@ -138,18 +161,14 @@ class BoundlessBuffaloEnv(gym.Env):
                 self.seed += 1
             self.__draw_polynomial()
 
-        return np.zeros((1,), dtype=np.float32), reward, False, False, {"coef": self.polynomial.coef}
+        return np.zeros((1,), dtype=np.float32), reward, False, False, {"coef": self.coefficient}
 
     def plot_polynomial(self):
-        """
-        Plots the current polynomial
-        """
         x = np.linspace(self.left_shoulder, self.right_shoulder, 1000)
         y = self.polynomial(x)
         plt.plot(x, y)
         plt.xlabel("Action")
         plt.ylabel("Reward")
         plt.title("Reward Polynomial")
-        plt.legend()
         plt.grid()
         plt.show()

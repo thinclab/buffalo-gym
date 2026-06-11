@@ -53,20 +53,19 @@ class BoundlessBuffaloEnv(gym.Env):
             self.reward_model = Gaussian(mus=[0.35, 0.65], alphas=[40.0, 40.0], coefs=[1.0, 1.0], norm=1.31)
             self.left_shoulder = 0.0
             self.right_shoulder = 1.0
-        elif polynomial == 2 or polynomial == 3:
-            if polynomial == 2:
-                coefficients = [1.1, -2.9, 3, 7.3, -1.4, -1.5, 2.3, -2.8, -2.7]
-                poly_coefficients = coefficients
-                powers = [0, 1, 2, 3, 4, 5, 6, 7, 8]
-            elif polynomial == 3:
-                coefficients = [0.1, 0.4, -0.08]
-                poly_coefficients = [0.1, 0, 0, 0, 0, 0, 0.4, 0, 0, 0, -0.08]
-                powers = [0, 6, 10]
+        elif polynomial == 2:
+            coefficients = [-0.0060, 8.67, -76.79, 465.10, -1839.85, 4178.89, -4195.64, -1106.22, 5652.66, -3199.24]
+            poly_coefficients = coefficients
+            powers = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
             self.polynomial = np.polynomial.Polynomial(poly_coefficients)
             self.reward_model = Polynomial(coefficients, powers)
-            roots = [root.real for root in self.polynomial.roots()]
-            self.left_shoulder = min(roots)
-            self.right_shoulder = max(roots)
+            self.left_shoulder = 0.0
+            self.right_shoulder = 0.76825
+        elif polynomial == 3:
+            self.polynomial = lambda x: (0.5172 * np.exp(-80 * (x + 0.4) ** 2) + 0.5 * np.exp(-80 * (x + 0.2) ** 2) + 0.5 * np.exp(-80 * x ** 2) + 0.5 * np.exp(-80 * (x - 0.2) ** 2) + 0.5172 * np.exp(-80 * (x - 0.4) ** 2))
+            self.reward_model = Gaussian(mus=[-0.4, -0.2, 0.0, 0.2, 0.4], alphas=[80.0, 80.0, 80.0, 80.0, 80.0], coefs=[0.5172, 0.5, 0.5, 0.5, 0.5172], norm=1)
+            self.left_shoulder = -0.7
+            self.right_shoulder = 0.7
         elif polynomial == 4:
             self.polynomial = lambda x: (0.5 * np.exp(-100 * (x - 0.6) ** 2) + 0.5 * np.exp(-2 * (x - 1.4) ** 2))
             self.reward_model = Gaussian(mus=[0.6, 1.4], alphas=[100.0, 2.0], coefs=[0.5, 0.5], norm=1)
@@ -175,7 +174,6 @@ class BoundlessBuffaloEnv(gym.Env):
         y = self.polynomial(x)
         plt.plot(x, y)
         plt.xlabel("Action")
-        plt.ylabel("Reward")
-        plt.title("Reward Polynomial")
+        plt.ylabel("Expected Reward")
         plt.grid()
         plt.show()
